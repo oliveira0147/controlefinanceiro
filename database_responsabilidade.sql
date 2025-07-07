@@ -24,12 +24,12 @@ SET c.responsavel_principal_id = ca.usuario_id,
     c.valor_secundario = 0.00;
 
 -- Tornar as colunas obrigatórias após atualizar dados existentes
-ALTER TABLE compras 
-MODIFY COLUMN responsavel_principal_id INT NOT NULL,
-MODIFY COLUMN percentual_principal DECIMAL(5,2) NOT NULL DEFAULT 100.00,
-MODIFY COLUMN percentual_secundario DECIMAL(5,2) NOT NULL DEFAULT 0.00,
-MODIFY COLUMN valor_principal DECIMAL(10,2) NOT NULL,
-MODIFY COLUMN valor_secundario DECIMAL(10,2) NOT NULL DEFAULT 0.00;
+-- Separando cada MODIFY em um comando ALTER TABLE diferente
+ALTER TABLE compras MODIFY COLUMN responsavel_principal_id INT NOT NULL;
+ALTER TABLE compras MODIFY COLUMN percentual_principal DECIMAL(5,2) NOT NULL DEFAULT 100.00;
+ALTER TABLE compras MODIFY COLUMN percentual_secundario DECIMAL(5,2) NOT NULL DEFAULT 0.00;
+ALTER TABLE compras MODIFY COLUMN valor_principal DECIMAL(10,2) NOT NULL;
+ALTER TABLE compras MODIFY COLUMN valor_secundario DECIMAL(10,2) NOT NULL DEFAULT 0.00;
 
 -- Adicionar índice para melhor performance
 CREATE INDEX idx_compras_responsaveis ON compras(responsavel_principal_id, responsavel_secundario_id); 

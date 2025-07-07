@@ -257,4 +257,92 @@ function emailExiste($email) {
     $stmt->execute([$email]);
     return $stmt->fetch() !== false;
 }
+
+// Função para obter uma compra específica
+function getCompra($compra_id, $usuario_id) {
+    $pdo = conectarDB();
+    $stmt = $pdo->prepare("
+        SELECT c.*, 
+               ca.nome as cartao_nome,
+               u1.nome as responsavel_principal_nome,
+               u2.nome as responsavel_secundario_nome
+        FROM compras c
+        JOIN cartoes ca ON c.cartao_id = ca.id
+        LEFT JOIN usuarios u1 ON c.responsavel_principal_id = u1.id
+        LEFT JOIN usuarios u2 ON c.responsavel_secundario_id = u2.id
+        WHERE c.id = ? AND ca.usuario_id = ?
+    ");
+    $stmt->execute([$compra_id, $usuario_id]);
+    return $stmt->fetch();
+}
+
+// Função para atualizar uma compra
+function atualizarCompra($compra_id, $dados) {
+    $pdo = conectarDB();
+    
+    try {
+        $pdo->beginTransaction();
+        
+        // Atualizar dados da compra
+        $stmt = $pdo->prepare("
+            UPDATE compras SET 
+                descricao = ?, 
+                valor_total = ?, 
+                num_parcelas = ?, 
+                mes_inicio = ?, 
+                data_compra = ?,
+                responsavel_principal_id = ?,
+                responsavel_secundario_id = ?,
+                percentual_principal = ?,
+                percentual_secundario = ?,
+                valor_principal = ?,
+                valor_secundario = ?
+            WHERE id = ?
+        ");
+        
+        $stmt->execute([
+            $dados['descricao'],
+            $dados['valor_total'],
+            $dados['num_parcelas'],
+            $dados['mes_inicio'],
+            $dados['data_compra'],
+            $dados['responsavel_principal_id'],
+            $dados['responsavel_secundario_id'],
+            $dados['percentual_principal'],
+            $dados['percentual_secundario'],
+            $dados['valor_principal'],
+            $dados['valor_secundario'],
+            $compra_id
+        ]);
+        
+        // Excluir parcelas antigas
+        $stmt = $pdo->prepare("DELETE FROM parcelas WHERE compra_id = ?");
+        $stmt->execute([$compra_id]);
+        
+        // Inserir novas parcelas
+        $stmt_parcela = $pdo->prepare("
+            INSERT INTO parcelas (compra_id, numero_parcela, valor_parcela, mes_vencimento, data_vencimento, status, data_pagamento) 
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ");
+        
+        foreach ($dados['parcelas'] as $parcela) {
+            $stmt_parcela->execute([
+                $compra_id,
+                $parcela['numero'],
+                $parcela['valor'],
+                $parcela['mes_vencimento'],
+                $parcela['data_vencimento'],
+                $parcela['status'],
+                $parcela['data_pagamento']
+            ]);
+        }
+        
+        $pdo->commit();
+        return true;
+        
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+}
 ?> 

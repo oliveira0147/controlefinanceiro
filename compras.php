@@ -484,6 +484,7 @@ if ($cartao_selecionado > 0) {
                         
                         <div style="margin-top: 10px;">
                             <a href="parcelas.php?compra_id=<?php echo $compra['id']; ?>" class="btn btn-primary btn-sm">Ver Parcelas</a>
+                            <a href="editar_compra.php?id=<?php echo $compra['id']; ?>" class="btn btn-warning btn-sm">Editar</a>
                             <button onclick="confirmarExclusaoCompra(<?php echo $compra['id']; ?>, '<?php echo htmlspecialchars($compra['descricao']); ?>')" class="btn btn-danger btn-sm">Excluir</button>
                         </div>
                     </div>
