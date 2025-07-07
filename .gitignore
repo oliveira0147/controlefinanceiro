@@ -1,0 +1,25 @@
+# Configurações do banco (não commitar credenciais)
+config/database.php
+
+# Logs
+*.log
+
+# Arquivos temporários
+*.tmp
+*.temp
+*~
+
+# Arquivos do sistema
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+
+# Backup files
+*.bak
+*.backup
+
+# Sessões PHP
+sess_* 
