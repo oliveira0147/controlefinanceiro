@@ -243,6 +243,11 @@ body {
     color: #383d41;
 }
 
+.badge-info {
+    background-color: #d1ecf1;
+    color: #0c5460;
+}
+
 /* Dashboard */
 .dashboard-stats {
     display: grid;

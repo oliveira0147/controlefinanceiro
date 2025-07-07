@@ -10,6 +10,15 @@ $usuario_filtro = isset($_GET['usuario']) ? $_GET['usuario'] : '';
 // Obter dados do resumo mensal da conta
 $resumo_mensal = getResumoMensalConta($mes_atual, $conta['id'], $usuario_filtro ? $usuario_filtro : null);
 
+// Obter gastos individuais por usuário
+$gastos_individuais = getGastosIndividuaisUsuario($mes_atual, $conta['id'], $usuario_filtro ? $usuario_filtro : null);
+
+// Obter detalhes das compras por usuário
+$detalhes_compras = getDetalhesComprasUsuario($mes_atual, $conta['id'], $usuario_filtro ? $usuario_filtro : null);
+
+// Debug - verificar compras com responsabilidade compartilhada
+$debug_compras = debugComprasResponsabilidade($mes_atual, $conta['id']);
+
 // Calcular totais
 $total_parcelas = 0;
 $total_pago = 0;
@@ -175,6 +184,159 @@ $usuarios_conta = getUsuariosConta($conta['id']);
                             <td><?php echo formatarMoeda($salario['vr']); ?></td>
                             <td><?php echo formatarMoeda($salario['outros_beneficios']); ?></td>
                             <td><strong><?php echo formatarMoeda($total_usuario); ?></strong></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php endif; ?>
+
+        <!-- Gastos Individuais por Membro -->
+        <?php if (!empty($gastos_individuais)): ?>
+        <div class="card">
+            <h2>Gastos Individuais por Membro - <?php echo htmlspecialchars($mes_atual); ?></h2>
+            <p style="color: #666; margin-bottom: 1rem;">
+                <strong>💡 Como funciona:</strong> Os valores são calculados baseados na responsabilidade compartilhada definida em cada compra.
+            </p>
+            
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Membro</th>
+                        <th>Total Responsabilidade</th>
+                        <th>Pago</th>
+                        <th>Pendente</th>
+                        <th>Compras</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($gastos_individuais as $gasto): ?>
+                        <tr>
+                            <td><strong><?php echo htmlspecialchars($gasto['usuario_nome']); ?></strong></td>
+                            <td><?php echo formatarMoeda($gasto['total_responsabilidade']); ?></td>
+                            <td><?php echo formatarMoeda($gasto['total_pago']); ?></td>
+                            <td><?php echo formatarMoeda($gasto['total_pendente']); ?></td>
+                            <td><?php echo $gasto['num_compras']; ?> compra(s)</td>
+                            <td>
+                                <?php if ($gasto['total_pendente'] > 0): ?>
+                                    <span class="badge badge-warning">Pendente</span>
+                                <?php elseif ($gasto['total_responsabilidade'] > 0): ?>
+                                    <span class="badge badge-success">Pago</span>
+                                <?php else: ?>
+                                    <span class="badge badge-secondary">Sem gastos</span>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php endif; ?>
+
+        <!-- Detalhes das Compras por Membro -->
+        <?php if (!empty($detalhes_compras)): ?>
+        <div class="card">
+            <h2>Detalhes das Compras por Membro - <?php echo htmlspecialchars($mes_atual); ?></h2>
+            <p style="color: #666; margin-bottom: 1rem;">
+                <strong>📋 Detalhamento:</strong> Mostra cada parcela e quanto cada pessoa deve pagar baseado na responsabilidade definida.
+            </p>
+            
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Membro</th>
+                        <th>Cartão</th>
+                        <th>Compra</th>
+                        <th>Valor Parcela</th>
+                        <th>Sua Responsabilidade</th>
+                        <th>Tipo</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($detalhes_compras as $detalhe): ?>
+                        <tr>
+                            <td><strong><?php echo htmlspecialchars($detalhe['usuario_nome']); ?></strong></td>
+                            <td><?php echo htmlspecialchars($detalhe['cartao_nome']); ?></td>
+                            <td><?php echo htmlspecialchars($detalhe['compra_descricao']); ?></td>
+                            <td><?php echo formatarMoeda($detalhe['valor_parcela']); ?></td>
+                            <td>
+                                <strong><?php echo formatarMoeda($detalhe['valor_responsabilidade']); ?></strong>
+                                <br>
+                                <small style="color: #666;">
+                                    <?php if ($detalhe['tipo_responsabilidade'] == 'Principal'): ?>
+                                        <?php echo $detalhe['percentual_principal']; ?>% de responsabilidade
+                                    <?php else: ?>
+                                        <?php echo $detalhe['percentual_secundario']; ?>% de responsabilidade
+                                    <?php endif; ?>
+                                </small>
+                            </td>
+                            <td>
+                                <?php if ($detalhe['tipo_responsabilidade'] == 'Principal'): ?>
+                                    <span class="badge badge-success">Principal</span>
+                                <?php else: ?>
+                                    <span class="badge badge-info">Secundário</span>
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <?php if ($detalhe['status'] == 'paga'): ?>
+                                    <span class="badge badge-success">Paga</span>
+                                <?php else: ?>
+                                    <span class="badge badge-warning">Pendente</span>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php endif; ?>
+
+        <!-- DEBUG: Todas as Compras com Responsabilidade Compartilhada -->
+        <?php if (!empty($debug_compras)): ?>
+        <div class="card" style="border: 2px solid #ffc107;">
+            <h2>🔍 DEBUG: Todas as Compras - <?php echo htmlspecialchars($mes_atual); ?></h2>
+            <p style="color: #666; margin-bottom: 1rem;">
+                <strong>Debug:</strong> Esta seção mostra todas as compras encontradas para verificar se a compra 50/50 está sendo capturada.
+            </p>
+            
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Descrição</th>
+                        <th>Cartão</th>
+                        <th>Valor Total</th>
+                        <th>% Principal</th>
+                        <th>% Secundário</th>
+                        <th>Responsável Principal</th>
+                        <th>Responsável Secundário</th>
+                        <th>Valor Parcela</th>
+                        <th>Mês</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($debug_compras as $debug): ?>
+                        <tr>
+                            <td><?php echo $debug['compra_id']; ?></td>
+                            <td><?php echo htmlspecialchars($debug['descricao']); ?></td>
+                            <td><?php echo htmlspecialchars($debug['cartao_nome']); ?></td>
+                            <td><?php echo formatarMoeda($debug['valor_total']); ?></td>
+                            <td><?php echo $debug['percentual_principal']; ?>%</td>
+                            <td><?php echo $debug['percentual_secundario']; ?>%</td>
+                            <td><?php echo htmlspecialchars($debug['responsavel_principal']); ?></td>
+                            <td><?php echo htmlspecialchars($debug['responsavel_secundario'] ?? 'N/A'); ?></td>
+                            <td><?php echo formatarMoeda($debug['valor_parcela']); ?></td>
+                            <td><?php echo htmlspecialchars($debug['mes_vencimento']); ?></td>
+                            <td>
+                                <?php if ($debug['status'] == 'paga'): ?>
+                                    <span class="badge badge-success">Paga</span>
+                                <?php else: ?>
+                                    <span class="badge badge-warning">Pendente</span>
+                                <?php endif; ?>
+                            </td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>

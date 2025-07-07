@@ -345,4 +345,132 @@ function atualizarCompra($compra_id, $dados) {
         throw $e;
     }
 }
+
+// Função para obter gastos individuais por usuário (considerando responsabilidade compartilhada)
+function getGastosIndividuaisUsuario($mes_ano, $conta_id, $usuario_id = null) {
+    $pdo = conectarDB();
+    
+    $sql = "SELECT 
+                u.id as usuario_id,
+                u.nome as usuario_nome,
+                COALESCE(SUM(CASE 
+                    WHEN c.responsavel_principal_id = u.id THEN 
+                        (p.valor_parcela * c.percentual_principal / 100)
+                    WHEN c.responsavel_secundario_id = u.id THEN 
+                        (p.valor_parcela * c.percentual_secundario / 100)
+                    ELSE 0 
+                END), 0) as total_responsabilidade,
+                COALESCE(SUM(CASE 
+                    WHEN c.responsavel_principal_id = u.id AND p.status = 'paga' THEN 
+                        (p.valor_parcela * c.percentual_principal / 100)
+                    WHEN c.responsavel_secundario_id = u.id AND p.status = 'paga' THEN 
+                        (p.valor_parcela * c.percentual_secundario / 100)
+                    ELSE 0 
+                END), 0) as total_pago,
+                COALESCE(SUM(CASE 
+                    WHEN c.responsavel_principal_id = u.id AND p.status = 'pendente' THEN 
+                        (p.valor_parcela * c.percentual_principal / 100)
+                    WHEN c.responsavel_secundario_id = u.id AND p.status = 'pendente' THEN 
+                        (p.valor_parcela * c.percentual_secundario / 100)
+                    ELSE 0 
+                END), 0) as total_pendente,
+                COUNT(DISTINCT CASE 
+                    WHEN (c.responsavel_principal_id = u.id OR c.responsavel_secundario_id = u.id) 
+                    THEN p.compra_id 
+                    ELSE NULL 
+                END) as num_compras
+            FROM usuarios u
+            LEFT JOIN compras c ON (c.responsavel_principal_id = u.id OR c.responsavel_secundario_id = u.id)
+            LEFT JOIN parcelas p ON c.id = p.compra_id AND p.mes_vencimento = ?
+            WHERE u.conta_id = ?";
+    
+    $params = [$mes_ano, $conta_id];
+    
+    if ($usuario_id) {
+        $sql .= " AND u.id = ?";
+        $params[] = $usuario_id;
+    }
+    
+    $sql .= " GROUP BY u.id, u.nome ORDER BY u.nome";
+    
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    return $stmt->fetchAll();
+}
+
+// Função para obter detalhes das compras por usuário
+function getDetalhesComprasUsuario($mes_ano, $conta_id, $usuario_id = null) {
+    $pdo = conectarDB();
+    
+    $sql = "SELECT 
+                u.nome as usuario_nome,
+                ca.nome as cartao_nome,
+                c.descricao as compra_descricao,
+                c.percentual_principal,
+                c.percentual_secundario,
+                c.valor_principal,
+                c.valor_secundario,
+                p.valor_parcela,
+                p.status,
+                CASE 
+                    WHEN c.responsavel_principal_id = u.id THEN 
+                        (p.valor_parcela * c.percentual_principal / 100)
+                    WHEN c.responsavel_secundario_id = u.id THEN 
+                        (p.valor_parcela * c.percentual_secundario / 100)
+                    ELSE 0 
+                END as valor_responsabilidade,
+                CASE 
+                    WHEN c.responsavel_principal_id = u.id THEN 'Principal'
+                    WHEN c.responsavel_secundario_id = u.id THEN 'Secundário'
+                    ELSE 'N/A'
+                END as tipo_responsabilidade,
+                p.mes_vencimento
+            FROM usuarios u
+            JOIN compras c ON (c.responsavel_principal_id = u.id OR c.responsavel_secundario_id = u.id)
+            JOIN cartoes ca ON c.cartao_id = ca.id
+            JOIN parcelas p ON c.id = p.compra_id
+            WHERE u.conta_id = ? AND p.mes_vencimento = ?";
+    
+    $params = [$conta_id, $mes_ano];
+    
+    if ($usuario_id) {
+        $sql .= " AND u.id = ?";
+        $params[] = $usuario_id;
+    }
+    
+    $sql .= " ORDER BY u.nome, ca.nome, c.descricao";
+    
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    return $stmt->fetchAll();
+}
+
+// Função para debug - verificar compras com responsabilidade compartilhada
+function debugComprasResponsabilidade($mes_ano, $conta_id) {
+    $pdo = conectarDB();
+    
+    $sql = "SELECT 
+                c.id as compra_id,
+                c.descricao,
+                c.valor_total,
+                c.percentual_principal,
+                c.percentual_secundario,
+                u1.nome as responsavel_principal,
+                u2.nome as responsavel_secundario,
+                ca.nome as cartao_nome,
+                p.valor_parcela,
+                p.mes_vencimento,
+                p.status
+            FROM compras c
+            JOIN cartoes ca ON c.cartao_id = ca.id
+            JOIN usuarios u1 ON c.responsavel_principal_id = u1.id
+            LEFT JOIN usuarios u2 ON c.responsavel_secundario_id = u2.id
+            JOIN parcelas p ON c.id = p.compra_id
+            WHERE u1.conta_id = ? AND p.mes_vencimento = ?
+            ORDER BY c.descricao";
+    
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([$conta_id, $mes_ano]);
+    return $stmt->fetchAll();
+}
 ?> 

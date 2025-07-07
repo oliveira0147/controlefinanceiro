@@ -25,6 +25,16 @@ Sistema simples em PHP para controle financeiro pessoal/familiar com cartões de
 - **Salários**: Controle salários e benefícios
 - **Dashboard**: Resumo financeiro mensal
 
+## Dashboard e Responsabilidade Compartilhada
+
+- O dashboard mostra os gastos individuais de cada membro da família, considerando a responsabilidade compartilhada definida em cada compra.
+- O detalhamento e os totais exibidos são referentes ao **mês selecionado** no filtro do dashboard (campo "Mês/Ano").
+- Se uma compra parcelada não tiver parcela para o mês selecionado, ela não aparecerá no detalhamento daquele mês.
+- Para visualizar compras de outros meses, basta alterar o filtro de mês no topo do dashboard.
+- Os cards de compras mostram todas as compras do cartão, independente do mês.
+
+**Dica:** Para ver o quanto cada pessoa deve pagar em cada mês, altere o filtro de mês e veja o detalhamento atualizado.
+
 ## 🔧 Requisitos
 
 - PHP 7.4+
