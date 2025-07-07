@@ -119,9 +119,66 @@ function getCartoesUsuario($usuario_id) {
 // Função para obter compras de um cartão
 function getComprasCartao($cartao_id) {
     $pdo = conectarDB();
-    $stmt = $pdo->prepare("SELECT * FROM compras WHERE cartao_id = ? ORDER BY data_compra DESC");
+    $stmt = $pdo->prepare("
+        SELECT c.*, 
+               u1.nome as responsavel_principal_nome,
+               u2.nome as responsavel_secundario_nome
+        FROM compras c
+        LEFT JOIN usuarios u1 ON c.responsavel_principal_id = u1.id
+        LEFT JOIN usuarios u2 ON c.responsavel_secundario_id = u2.id
+        WHERE c.cartao_id = ? 
+        ORDER BY c.data_compra DESC
+    ");
     $stmt->execute([$cartao_id]);
     return $stmt->fetchAll();
+}
+
+// Função para obter compras de um usuário (como responsável)
+function getComprasUsuario($usuario_id) {
+    $pdo = conectarDB();
+    $stmt = $pdo->prepare("
+        SELECT c.*, 
+               ca.nome as cartao_nome,
+               u1.nome as responsavel_principal_nome,
+               u2.nome as responsavel_secundario_nome
+        FROM compras c
+        JOIN cartoes ca ON c.cartao_id = ca.id
+        LEFT JOIN usuarios u1 ON c.responsavel_principal_id = u1.id
+        LEFT JOIN usuarios u2 ON c.responsavel_secundario_id = u2.id
+        WHERE c.responsavel_principal_id = ? OR c.responsavel_secundario_id = ?
+        ORDER BY c.data_compra DESC
+    ");
+    $stmt->execute([$usuario_id, $usuario_id]);
+    return $stmt->fetchAll();
+}
+
+// Função para obter membros da família (excluindo o usuário atual)
+function getMembrosFamilia($conta_id, $excluir_usuario_id = null) {
+    $pdo = conectarDB();
+    $sql = "SELECT id, nome FROM usuarios WHERE conta_id = ?";
+    $params = [$conta_id];
+    
+    if ($excluir_usuario_id) {
+        $sql .= " AND id != ?";
+        $params[] = $excluir_usuario_id;
+    }
+    
+    $sql .= " ORDER BY nome";
+    
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    return $stmt->fetchAll();
+}
+
+// Função para calcular valores baseado em percentuais
+function calcularValoresResponsabilidade($valor_total, $percentual_principal, $percentual_secundario) {
+    $valor_principal = ($valor_total * $percentual_principal) / 100;
+    $valor_secundario = ($valor_total * $percentual_secundario) / 100;
+    
+    return [
+        'valor_principal' => round($valor_principal, 2),
+        'valor_secundario' => round($valor_secundario, 2)
+    ];
 }
 
 // Função para obter parcelas de uma compra

@@ -19,11 +19,20 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['acao'])) {
         $num_parcelas = intval($_POST['num_parcelas']);
         $parcelas_pagas = intval($_POST['parcelas_pagas']);
         $data_compra = $_POST['data_compra'];
+        $percentual_principal = floatval($_POST['percentual_principal']);
+        $percentual_secundario = floatval($_POST['percentual_secundario']);
+        $responsavel_secundario_id = !empty($_POST['responsavel_secundario_id']) ? intval($_POST['responsavel_secundario_id']) : null;
         
         if (empty($descricao) || $valor_parcela <= 0 || $num_parcelas <= 0 || $parcelas_pagas < 0) {
             $erro = 'Todos os campos são obrigatórios e devem ser válidos.';
         } elseif ($parcelas_pagas > $num_parcelas) {
             $erro = 'Quantidade de parcelas pagas não pode ser maior que o total de parcelas.';
+        } elseif ($percentual_principal + $percentual_secundario != 100) {
+            $erro = 'A soma dos percentuais deve ser 100%.';
+        } elseif ($responsavel_secundario_id && $percentual_secundario <= 0) {
+            $erro = 'Selecione um percentual para o cônjuge.';
+        } elseif ($responsavel_secundario_id && $percentual_principal <= 0) {
+            $erro = 'Você deve ter pelo menos 1% de responsabilidade.';
         } else {
             // Verificar se o cartão pertence ao usuário
             $cartao_permitido = false;
@@ -39,6 +48,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['acao'])) {
             } else {
                 // Calcular valor total
                 $valor_total = $valor_parcela * $num_parcelas;
+                
+                // Calcular valores de responsabilidade
+                $valores_resp = calcularValoresResponsabilidade($valor_total, $percentual_principal, $percentual_secundario);
                 
                 // Calcular mês de início baseado nas parcelas já pagas
                 $data_compra_obj = new DateTime($data_compra);
@@ -56,9 +68,21 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['acao'])) {
                 try {
                     $pdo->beginTransaction();
                     
-                    // Inserir compra
-                    $stmt = $pdo->prepare("INSERT INTO compras (cartao_id, descricao, valor_total, num_parcelas, mes_inicio, data_compra) VALUES (?, ?, ?, ?, ?, ?)");
-                    $stmt->execute([$cartao_id, $descricao, $valor_total, $num_parcelas, $mes_inicio, $data_compra]);
+                    // Inserir compra com responsabilidade
+                    $stmt = $pdo->prepare("
+                        INSERT INTO compras (
+                            cartao_id, descricao, valor_total, num_parcelas, mes_inicio, data_compra,
+                            responsavel_principal_id, responsavel_secundario_id, 
+                            percentual_principal, percentual_secundario,
+                            valor_principal, valor_secundario
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ");
+                    $stmt->execute([
+                        $cartao_id, $descricao, $valor_total, $num_parcelas, $mes_inicio, $data_compra,
+                        $usuario['id'], $responsavel_secundario_id,
+                        $percentual_principal, $percentual_secundario,
+                        $valores_resp['valor_principal'], $valores_resp['valor_secundario']
+                    ]);
                     
                     $compra_id = $pdo->lastInsertId();
                     
@@ -341,6 +365,50 @@ if ($cartao_selecionado > 0) {
                             <input type="date" id="data_compra" name="data_compra" required value="<?php echo date('Y-m-d'); ?>">
                         </div>
                         
+                        <!-- Responsabilidade Compartilhada -->
+                        <div class="form-group">
+                            <label>Responsabilidade da Compra:</label>
+                            <div style="border: 1px solid #ddd; padding: 15px; border-radius: 5px; background-color: #f9f9f9;">
+                                <div style="margin-bottom: 10px;">
+                                    <label style="font-weight: bold; color: #495057;">Você (Responsável Principal):</label>
+                                    <div style="display: flex; gap: 10px; align-items: center; margin-top: 5px;">
+                                        <input type="number" id="percentual_principal" name="percentual_principal" min="0" max="100" value="100" style="width: 80px;" onchange="calcularResponsabilidade()">
+                                        <span>%</span>
+                                        <span id="valor_principal_display" style="font-weight: bold; color: #28a745;"></span>
+                                    </div>
+                                </div>
+                                
+                                <div style="margin-bottom: 10px;">
+                                    <label for="responsavel_secundario" style="font-weight: bold; color: #495057;">Compartilhar com:</label>
+                                    <select id="responsavel_secundario" name="responsavel_secundario_id" style="width: 100%; margin-top: 5px;" onchange="calcularResponsabilidade()">
+                                        <option value="">Ninguém (só eu)</option>
+                                        <?php 
+                                        $membros = getMembrosFamilia($conta['id'], $usuario['id']);
+                                        foreach ($membros as $membro): 
+                                        ?>
+                                            <option value="<?php echo $membro['id']; ?>"><?php echo htmlspecialchars($membro['nome']); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                
+                                <div id="div_secundario" style="display: none;">
+                                    <label style="font-weight: bold; color: #495057;">Percentual do Cônjuge:</label>
+                                    <div style="display: flex; gap: 10px; align-items: center; margin-top: 5px;">
+                                        <input type="number" id="percentual_secundario" name="percentual_secundario" min="0" max="100" value="0" style="width: 80px;" onchange="calcularResponsabilidade()">
+                                        <span>%</span>
+                                        <span id="valor_secundario_display" style="font-weight: bold; color: #dc3545;"></span>
+                                    </div>
+                                </div>
+                                
+                                <div style="margin-top: 15px; padding: 10px; background-color: #e9ecef; border-radius: 5px;">
+                                    <strong>Total: <span id="total_percentual">100</span>%</strong>
+                                    <div id="erro_percentual" style="color: #dc3545; font-size: 0.9em; margin-top: 5px; display: none;">
+                                        A soma dos percentuais deve ser 100%
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
                         <!-- Campos calculados automaticamente -->
                         <div class="form-group">
                             <label>Valor Total Calculado:</label>
@@ -394,6 +462,19 @@ if ($cartao_selecionado > 0) {
                         </div>
                         
                         <div class="compra-detalhes">
+                            <strong>Responsabilidade:</strong>
+                            <?php if ($compra['responsavel_secundario_id']): ?>
+                                <div style="margin-top: 5px;">
+                                    <span style="color: #28a745;"><?php echo htmlspecialchars($compra['responsavel_principal_nome']); ?>: <?php echo $compra['percentual_principal']; ?>% (<?php echo formatarMoeda($compra['valor_principal']); ?>)</span>
+                                    <br>
+                                    <span style="color: #dc3545;"><?php echo htmlspecialchars($compra['responsavel_secundario_nome']); ?>: <?php echo $compra['percentual_secundario']; ?>% (<?php echo formatarMoeda($compra['valor_secundario']); ?>)</span>
+                                </div>
+                            <?php else: ?>
+                                <span style="color: #28a745;"><?php echo htmlspecialchars($compra['responsavel_principal_nome']); ?>: 100%</span>
+                            <?php endif; ?>
+                        </div>
+                        
+                        <div class="compra-detalhes">
                             <strong>Início:</strong> <?php echo htmlspecialchars($compra['mes_inicio']); ?>
                         </div>
                         
@@ -428,6 +509,18 @@ if ($cartao_selecionado > 0) {
         document.getElementById('parcelas_pagas').addEventListener('input', calcularValores);
         document.getElementById('data_compra').addEventListener('change', calcularValores);
         
+        // Responsabilidade compartilhada
+        document.getElementById('responsavel_secundario').addEventListener('change', function() {
+            const divSecundario = document.getElementById('div_secundario');
+            if (this.value) {
+                divSecundario.style.display = 'block';
+            } else {
+                divSecundario.style.display = 'none';
+                document.getElementById('percentual_secundario').value = 0;
+                calcularResponsabilidade();
+            }
+        });
+        
         function calcularValores() {
             const valorParcela = parseFloat(document.getElementById('valor_parcela').value) || 0;
             const numParcelas = parseInt(document.getElementById('num_parcelas').value) || 1;
@@ -445,8 +538,45 @@ if ($cartao_selecionado > 0) {
                 const mesInicioFormatado = (mesInicio.getMonth() + 1).toString().padStart(2, '0') + '/' + mesInicio.getFullYear();
                 document.getElementById('mes_inicio_calculado').value = mesInicioFormatado;
             }
+            
+            // Recalcular responsabilidade
+            calcularResponsabilidade();
         }
         
+        function calcularResponsabilidade() {
+            const valorParcela = parseFloat(document.getElementById('valor_parcela').value) || 0;
+            const numParcelas = parseInt(document.getElementById('num_parcelas').value) || 1;
+            const valorTotal = valorParcela * numParcelas;
+            
+            const percentualPrincipal = parseFloat(document.getElementById('percentual_principal').value) || 0;
+            const percentualSecundario = parseFloat(document.getElementById('percentual_secundario').value) || 0;
+            const totalPercentual = percentualPrincipal + percentualSecundario;
+
+            document.getElementById('total_percentual').textContent = totalPercentual.toFixed(2);
+
+            if (totalPercentual > 100) {
+                document.getElementById('erro_percentual').style.display = 'block';
+                document.getElementById('percentual_principal').value = Math.max(0, 100 - percentualSecundario);
+                return;
+            } else {
+                document.getElementById('erro_percentual').style.display = 'none';
+            }
+
+            // Atualizar valores exibidos
+            const valorPrincipal = (valorTotal * percentualPrincipal) / 100;
+            const valorSecundario = (valorTotal * percentualSecundario) / 100;
+            
+            document.getElementById('valor_principal_display').textContent = 'R$ ' + valorPrincipal.toFixed(2).replace('.', ',');
+            document.getElementById('valor_secundario_display').textContent = 'R$ ' + valorSecundario.toFixed(2).replace('.', ',');
+        }
+
+        function confirmarExclusaoCompra(compraId, descricao) {
+            if (confirm('Tem certeza que deseja excluir a compra "' + descricao + '"?')) {
+                document.getElementById('compra_id_excluir').value = compraId; // Preenche o campo oculto
+                document.getElementById('formExcluirCompra').submit(); // Envia o formulário
+            }
+        }
+
         // Toggle do formulário
         function toggleForm() {
             const formToggle = document.querySelector('.form-toggle');
@@ -455,13 +585,6 @@ if ($cartao_selecionado > 0) {
         
         // Calcular valores iniciais
         calcularValores();
-
-        function confirmarExclusaoCompra(compraId, descricao) {
-            if (confirm('Tem certeza que deseja excluir a compra "' + descricao + '"?')) {
-                document.getElementById('compra_id_excluir').value = compraId; // Preenche o campo oculto
-                document.getElementById('formExcluirCompra').submit(); // Envia o formulário
-            }
-        }
     </script>
 </body>
 </html> 
