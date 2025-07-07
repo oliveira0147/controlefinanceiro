@@ -293,7 +293,7 @@ if ($cartao_selecionado > 0) {
                 <span>➕ Registrar Nova Compra</span>
                 <span class="toggle-icon">▼</span>
             </h3>
-            <div class="form-content">
+            <div class="form-content" onclick="event.stopPropagation()">
                 <?php if (empty($cartoes)): ?>
                     <div class="alert alert-warning">
                         Você precisa ter pelo menos um cartão cadastrado para registrar compras. 
