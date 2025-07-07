@@ -25,6 +25,34 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['acao'])) {
                 $erro = 'Erro ao adicionar cartão.';
             }
         }
+    } elseif ($_POST['acao'] == 'excluir_cartao') {
+        $cartao_id = intval($_POST['cartao_id']);
+        
+        // Verificar se o cartão pertence ao usuário
+        $pdo = conectarDB();
+        $stmt = $pdo->prepare("SELECT id FROM cartoes WHERE id = ? AND usuario_id = ?");
+        $stmt->execute([$cartao_id, $usuario['id']]);
+        
+        if ($stmt->fetch()) {
+            // Verificar se há compras no cartão
+            $stmt = $pdo->prepare("SELECT COUNT(*) as total FROM compras WHERE cartao_id = ?");
+            $stmt->execute([$cartao_id]);
+            $compras = $stmt->fetch();
+            
+            if ($compras['total'] > 0) {
+                $erro = 'Não é possível excluir o cartão pois existem compras registradas. Exclua as compras primeiro.';
+            } else {
+                // Excluir o cartão
+                $stmt = $pdo->prepare("DELETE FROM cartoes WHERE id = ? AND usuario_id = ?");
+                if ($stmt->execute([$cartao_id, $usuario['id']])) {
+                    $mensagem = 'Cartão excluído com sucesso!';
+                } else {
+                    $erro = 'Erro ao excluir cartão.';
+                }
+            }
+        } else {
+            $erro = 'Cartão não encontrado ou sem permissão.';
+        }
     }
 }
 
@@ -113,6 +141,7 @@ $cartoes = getCartoesUsuario($usuario['id']);
                                 <td><?php echo date('d/m/Y', strtotime($cartao['data_criacao'])); ?></td>
                                 <td>
                                     <a href="compras.php?cartao_id=<?php echo $cartao['id']; ?>" class="btn btn-primary btn-sm">Ver Compras</a>
+                                    <button onclick="confirmarExclusao(<?php echo $cartao['id']; ?>, '<?php echo htmlspecialchars($cartao['nome']); ?>')" class="btn btn-danger btn-sm">Excluir</button>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -145,5 +174,20 @@ $cartoes = getCartoesUsuario($usuario['id']);
         </div>
         <?php endif; ?>
     </div>
+
+    <!-- Formulário oculto para exclusão -->
+    <form id="formExcluir" method="POST" style="display: none;">
+        <input type="hidden" name="acao" value="excluir_cartao">
+        <input type="hidden" name="cartao_id" id="cartao_id_excluir">
+    </form>
+
+    <script>
+        function confirmarExclusao(cartaoId, nomeCartao) {
+            if (confirm('Tem certeza que deseja excluir o cartão "' + nomeCartao + '"?\n\nEsta ação não pode ser desfeita.')) {
+                document.getElementById('cartao_id_excluir').value = cartaoId;
+                document.getElementById('formExcluir').submit();
+            }
+        }
+    </script>
 </body>
 </html> 
